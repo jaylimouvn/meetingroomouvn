@@ -1,0 +1,1003 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OUVN Meeting Room Booking System</title>
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database.js"></script>
+
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700&display=swap');
+  :root {
+    --navy: #1B3A6B; --blue: #2563EB; --lblue: #DBEAFE;
+    --green: #16A34A; --lgreen: #DCFCE7;
+    --red: #DC2626; --lred: #FEE2E2;
+    --yellow: #D97706; --lyellow: #FEF3C7;
+    --purple: #7C3AED; --lpurple: #EDE9FE;
+    --gray: #F8FAFC; --dgray: #64748B;
+    --border: #E2E8F0; --white: #fff; --black: #0F172A;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Pretendard',sans-serif; background:#F1F5F9; color:var(--black); min-height:100vh; }
+
+  /* ── Header ── */
+  header {
+    background: linear-gradient(135deg, var(--navy) 0%, #2E5090 100%);
+    padding: 20px 32px; display:flex; align-items:center; justify-content:space-between;
+    box-shadow: 0 4px 20px rgba(27,58,107,.3);
+  }
+  header h1 { color:#fff; font-size:1.3rem; font-weight:700; letter-spacing:-.02em; }
+  header h1 span { font-size:.85rem; font-weight:400; opacity:.7; display:block; margin-top:2px; }
+  .legend { display:flex; gap:12px; flex-wrap:wrap; }
+  .leg { display:flex; align-items:center; gap:6px; font-size:.75rem; color:#fff; opacity:.9; }
+  .leg-dot { width:12px; height:12px; border-radius:3px; }
+
+  /* ── Tab Nav ── */
+  .tabs { display:flex; background:#fff; border-bottom:2px solid var(--border); padding:0 32px; }
+  .tab { padding:14px 20px; font-size:.88rem; font-weight:600; color:var(--dgray);
+    cursor:pointer; border-bottom:3px solid transparent; margin-bottom:-2px; transition:.2s; }
+  .tab:hover { color:var(--blue); }
+  .tab.active { color:var(--blue); border-bottom-color:var(--blue); }
+
+  /* ── Main ── */
+  main { padding:24px 32px; }
+
+  /* ── Fixed meetings notice ── */
+  .fixed-notice {
+    background: linear-gradient(135deg, #FFFBEB 0%, #FEF3C7 100%);
+    border:2px solid #FCD34D; border-radius:12px; padding:16px 20px; margin-bottom:20px;
+    display:flex; gap:16px; align-items:flex-start;
+  }
+  .fixed-notice .icon { font-size:1.5rem; flex-shrink:0; }
+  .fixed-notice h3 { font-size:.88rem; font-weight:700; color:#92400E; margin-bottom:8px; }
+  .fixed-list { display:flex; gap:10px; flex-wrap:wrap; }
+  .fixed-tag { background:#FEF08A; border:1.5px solid #FCD34D; border-radius:8px;
+    padding:4px 10px; font-size:.75rem; font-weight:600; color:#78350F; }
+
+  /* ── Week selector ── */
+  .week-bar { display:flex; align-items:center; gap:12px; margin-bottom:20px; }
+  .week-bar h2 { font-size:1rem; font-weight:700; color:var(--navy); }
+  .week-nav { background:var(--blue); color:#fff; border:none; border-radius:8px;
+    width:32px; height:32px; cursor:pointer; font-size:1rem; display:flex; align-items:center; justify-content:center; }
+
+  /* ── Timetable grid ── */
+  .timetable-wrap { overflow-x:auto; }
+  .timetable { min-width:900px; }
+  .tt-head { display:grid; grid-template-columns: 70px repeat(5,1fr); gap:2px; margin-bottom:2px; }
+  .tt-head-cell { background:var(--navy); color:#fff; text-align:center; padding:10px 6px;
+    border-radius:8px; font-size:.8rem; font-weight:700; }
+  .tt-head-cell.today { background:var(--blue); }
+
+  .tt-body { display:grid; grid-template-columns: 70px repeat(5,1fr); gap:2px; }
+  .time-label { padding:4px 8px; font-size:.72rem; color:var(--dgray); font-weight:600;
+    display:flex; align-items:center; justify-content:flex-end; }
+  .time-label.hour { color:var(--navy); font-weight:700; font-size:.78rem; }
+  .slot { background:#fff; border:1px solid var(--border); border-radius:6px;
+    min-height:22px; padding:2px 4px; position:relative; transition:.15s; }
+  .slot:hover { border-color:var(--blue); }
+  .slot.half { border-style:dashed; }
+  .slot.booked-meeting { background:var(--lgreen); border-color:#86EFAC; }
+  .slot.booked-interview { background:var(--lpurple); border-color:#C4B5FD; }
+  .slot.booked-fixed { background:var(--lyellow); border-color:#FCD34D; }
+  .slot.conflict { background:var(--lred); border-color:#FCA5A5; animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100%{border-color:#FCA5A5;} 50%{border-color:#DC2626;} }
+  .slot-content { font-size:.68rem; font-weight:600; line-height:1.3; }
+  .slot-content.meeting { color:#166534; }
+  .slot-content.interview { color:#5B21B6; }
+  .slot-content.fixed { color:#92400E; }
+  .slot-content.conflict { color:#B91C1C; font-weight:700; }
+
+  /* ── List view ── */
+  .list-view { display:none; }
+  .list-view.active { display:block; }
+  .timetable-view { display:block; }
+  .timetable-view.hidden { display:none; }
+
+  .day-group { margin-bottom:16px; }
+  .day-header { background:var(--navy); color:#fff; padding:10px 16px; border-radius:10px 10px 0 0;
+    font-size:.88rem; font-weight:700; display:flex; align-items:center; gap:8px; }
+  .day-header .date { font-weight:400; opacity:.8; font-size:.8rem; }
+  .booking-list { background:#fff; border:1px solid var(--border); border-radius:0 0 10px 10px; overflow:hidden; }
+  .booking-row { display:grid; grid-template-columns:100px 1fr 120px 80px 60px;
+    padding:10px 16px; border-bottom:1px solid var(--border); align-items:center; gap:12px; }
+  .booking-row:last-child { border-bottom:none; }
+  .booking-row:hover { background:var(--gray); }
+  .booking-row.conflict-row { background:#FFF5F5; }
+  .time-range { font-size:.85rem; font-weight:700; color:var(--navy); font-variant-numeric:tabular-nums; }
+  .booking-title { font-size:.85rem; font-weight:500; }
+  .owner-badge { background:var(--lblue); color:var(--blue); padding:3px 10px;
+    border-radius:20px; font-size:.75rem; font-weight:700; text-align:center; }
+  .purpose-badge { padding:3px 10px; border-radius:20px; font-size:.73rem; font-weight:700; text-align:center; }
+  .purpose-badge.meeting { background:var(--lgreen); color:var(--green); }
+  .purpose-badge.interview { background:var(--lpurple); color:var(--purple); }
+  .purpose-badge.fixed { background:var(--lyellow); color:var(--yellow); }
+  .conflict-badge { background:var(--lred); color:var(--red);
+    padding:3px 8px; border-radius:6px; font-size:.72rem; font-weight:700; }
+
+  /* ── Add booking form ── */
+  .add-form-wrap { display:none; }
+  .add-form-wrap.active { display:block; }
+  .form-card { background:#fff; border-radius:16px; padding:24px; box-shadow:0 2px 12px rgba(0,0,0,.06); }
+  .form-card h3 { font-size:1rem; font-weight:700; color:var(--navy); margin-bottom:20px; }
+  .form-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
+  .form-group { display:flex; flex-direction:column; gap:6px; }
+  .form-group label { font-size:.8rem; font-weight:600; color:var(--dgray); }
+  .form-group input, .form-group select {
+    border:1.5px solid var(--border); border-radius:8px; padding:9px 12px;
+    font-size:.88rem; font-family:inherit; color:var(--black);
+    transition:.2s; outline:none;
+  }
+  .form-group input:focus, .form-group select:focus { border-color:var(--blue); box-shadow:0 0 0 3px rgba(37,99,235,.12); }
+  .form-actions { display:flex; gap:10px; margin-top:20px; }
+  .btn-submit { background:var(--blue); color:#fff; border:none; border-radius:10px;
+    padding:11px 28px; font-size:.88rem; font-weight:700; cursor:pointer; transition:.2s; font-family:inherit; }
+  .btn-submit:hover { background:#1D4ED8; }
+  .btn-cancel { background:var(--gray); color:var(--dgray); border:none; border-radius:10px;
+    padding:11px 20px; font-size:.88rem; font-weight:600; cursor:pointer; font-family:inherit; }
+  .conflict-alert { background:var(--lred); border:2px solid #FCA5A5; border-radius:10px;
+    padding:14px 16px; margin-top:16px; display:none; }
+  .conflict-alert.show { display:flex; gap:10px; align-items:flex-start; }
+  .conflict-alert p { font-size:.84rem; color:var(--red); font-weight:600; }
+
+  /* ── Firebase Setup Banner ── */
+  .firebase-banner { background:linear-gradient(135deg, #DBEAFE 0%, #E0E7FF 100%);
+    border:2px solid #0EA5E9; border-radius:12px; padding:16px 20px; margin-bottom:20px;
+    display:flex; gap:16px; align-items:flex-start; }
+  .firebase-banner.hidden { display:none; }
+  .firebase-banner .icon { font-size:1.5rem; flex-shrink:0; }
+  .firebase-banner h3 { font-size:.9rem; font-weight:700; color:#0369A1; margin-bottom:6px; }
+  .firebase-banner p { font-size:.8rem; color:#0369A1; margin-bottom:8px; line-height:1.5; }
+  .firebase-banner .code { background:#fff; border:1px solid #BAE6FD; border-radius:6px;
+    padding:12px; font-family:monospace; font-size:.75rem; color:#0c4a6e; overflow-x:auto; margin-bottom:8px; }
+  .firebase-banner a { color:#0284C7; text-decoration:underline; font-weight:600; }
+
+  /* ── Summary cards ── */
+  .summary-bar { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:20px; }
+  .sum-card { background:#fff; border-radius:12px; padding:14px 16px; border:1.5px solid var(--border); }
+  .sum-card .num { font-size:1.6rem; font-weight:800; color:var(--navy); }
+  .sum-card .lbl { font-size:.75rem; color:var(--dgray); margin-top:2px; }
+  .sum-card.conflict { border-color:#FCA5A5; background:#FFF5F5; }
+  .fixed-item { background:var(--gray); border:1.5px solid var(--border); border-radius:10px; padding:12px 16px; display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  .fixed-item-info { flex:1; }
+  .fixed-item-day { font-size:.75rem; color:var(--dgray); font-weight:600; margin-bottom:2px; }
+  .fixed-item-time { font-size:.88rem; font-weight:700; color:var(--navy); }
+  .fixed-item-title { font-size:.8rem; color:var(--dgray); margin-top:4px; }
+  .fixed-item-actions { display:flex; gap:6px; }
+  .btn-edit { background:var(--blue); color:#fff; border:none; border-radius:6px; padding:6px 12px; font-size:.75rem; font-weight:600; cursor:pointer; font-family:inherit; }
+  .btn-edit:hover { background:#1D4ED8; }
+  .btn-delete { background:var(--red); color:#fff; border:none; border-radius:6px; padding:6px 12px; font-size:.75rem; font-weight:600; cursor:pointer; font-family:inherit; }
+  .btn-delete:hover { background:#B91C1C; }
+  .btn-delete-small { background:var(--red); color:#fff; border:none; border-radius:4px; padding:4px 8px; font-size:.7rem; font-weight:600; cursor:pointer; font-family:inherit; }
+  .btn-delete-small:hover { background:#B91C1C; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🏢 ONEUNIVERSE VN — Meeting Room Booking System
+    <span>Meeting Room Booking System</span>
+  </h1>
+  <div class="legend">
+    <div class="leg"><div class="leg-dot" style="background:#86EFAC"></div>Meeting</div>
+    <div class="leg"><div class="leg-dot" style="background:#C4B5FD"></div>Interview</div>
+    <div class="leg"><div class="leg-dot" style="background:#FCD34D"></div>Fixed Meeting</div>
+    <div class="leg"><div class="leg-dot" style="background:#FCA5A5"></div>⚠️ Conflict</div>
+  </div>
+</header>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('timetable')">📅 Timetable</div>
+  <div class="tab" onclick="switchTab('list')">📋 List View</div>
+  <div class="tab" onclick="switchTab('add')">➕ Add Booking</div>
+  <div class="tab" onclick="switchTab('fixed')">⭐ Fixed Meetings</div>
+</div>
+
+<main>
+
+<!-- Firebase Setup Banner -->
+<div class="firebase-banner" id="firebase-banner">
+  <div class="icon">🔧</div>
+  <div>
+    <h3>⚙️ Real-time Sync Setup Required</h3>
+    <p>To enable real-time multi-user synchronization, you need to configure Firebase:</p>
+    <ol style="font-size:.8rem; color:#0369A1; margin-left:20px; margin-bottom:8px;">
+      <li>Create a Firebase project at <a href="https://console.firebase.google.com" target="_blank">Firebase Console</a></li>
+      <li>Create a Realtime Database (Start in test mode)</li>
+      <li>Copy your Firebase config from Project Settings</li>
+      <li>Update the firebaseConfig object in the JavaScript (lines ~227-236)</li>
+    </ol>
+    <p style="font-size:.75rem; color:#0369A1; font-style:italic;">💡 Tip: With Firebase, all users see real-time updates automatically!</p>
+  </div>
+</div>
+
+<!-- Fixed notice -->
+<div class="fixed-notice">
+  <div class="icon">⚠️</div>
+  <div>
+    <h3>Fixed Recurring Meetings — Booking unavailable during these times</h3>
+    <div class="fixed-list">
+      <span class="fixed-tag">📌 Monday 15:30 – 16:30  SD Team Weekly (Amy)</span>
+      <span class="fixed-tag">📌 Tuesday 14:00 – 14:50  Biz & Team Leader Weekly (MK)</span>
+      <span class="fixed-tag">📌 Wednesday 14:00 – 14:50  Production Team Weekly (MK)</span>
+    </div>
+  </div>
+</div>
+
+<!-- Summary -->
+<div class="summary-bar">
+  <div class="sum-card"><div class="num" id="total-count">0</div><div class="lbl">Weekly Bookings</div></div>
+  <div class="sum-card"><div class="num" id="today-count">0</div><div class="lbl">Today's Bookings</div></div>
+  <div class="sum-card conflict"><div class="num" id="conflict-count">0</div><div class="lbl">⚠️ Weekly Booking Conflict</div></div>
+  <div class="sum-card"><div class="num" id="interview-count">0</div><div class="lbl">Weekly Interview</div></div>
+</div>
+
+<!-- Timetable View -->
+<div class="timetable-view" id="view-timetable">
+  <div class="week-bar">
+    <h2>🗓 Weekly Timetable</h2>
+    <button class="week-nav" onclick="prevWeek()" title="Previous week">◀</button>
+    <button class="week-nav" onclick="nextWeek()" title="Next week">▶</button>
+  </div>
+  <div class="timetable-wrap">
+    <div class="timetable">
+      <div class="tt-head">
+        <div class="tt-head-cell" style="background:#64748B">Time</div>
+      </div>
+      <div class="tt-body" id="tt-body"></div>
+    </div>
+  </div>
+</div>
+
+<!-- List View -->
+<div class="list-view" id="view-list">
+  <div class="week-bar">
+    <h2>📋 Weekly Bookings</h2>
+    <button class="week-nav" onclick="prevWeekList()" title="Previous week">◀</button>
+    <button class="week-nav" onclick="nextWeekList()" title="Next week">▶</button>
+  </div>
+  <div id="list-container"></div>
+</div>
+
+<!-- Add Form -->
+<div class="add-form-wrap" id="view-add">
+  <div class="form-card">
+    <h3>➕ Add New Booking</h3>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Date</label>
+        <input type="date" id="f-date">
+      </div>
+      <div class="form-group">
+        <label>Purpose</label>
+        <select id="f-type">
+          <option value="Meeting">Meeting</option>
+          <option value="Interview">Interview</option>
+          <option value="Training">Training</option>
+          <option value="Other">Other</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Owner</label>
+        <input type="text" id="f-owner" placeholder="Owner name">
+      </div>
+      <div class="form-group">
+        <label>Start Time</label>
+        <input type="time" id="f-start" min="09:00" max="20:00">
+      </div>
+      <div class="form-group">
+        <label>End Time</label>
+        <input type="time" id="f-end" min="09:00" max="20:00">
+      </div>
+      <div class="form-group">
+        <label>Notes</label>
+        <input type="text" id="f-note" placeholder="Additional notes (optional)">
+      </div>
+    </div>
+    <div class="conflict-alert" id="conflict-alert">
+      <span style="font-size:1.2rem">⚠️</span>
+      <p id="conflict-msg">Time conflict detected!</p>
+    </div>
+    <div class="form-actions">
+      <button class="btn-submit" onclick="addBooking()">Confirm Booking</button>
+      <button class="btn-cancel" onclick="checkConflict()">Check for Conflicts</button>
+    </div>
+  </div>
+</div>
+
+<!-- Fixed Meetings Management -->
+<div class="add-form-wrap" id="view-fixed">
+  <div class="form-card">
+    <h3>⭐ Manage Fixed Recurring Meetings</h3>
+    
+    <!-- Current Fixed Meetings -->
+    <div style="margin-bottom:24px;">
+      <h4 style="font-size:.95rem; font-weight:700; color:var(--navy); margin-bottom:12px;">Current Fixed Meetings</h4>
+      <div id="fixed-list-display" style="display:grid; gap:8px;"></div>
+    </div>
+    
+    <!-- Add New Fixed Meeting -->
+    <h4 style="font-size:.95rem; font-weight:700; color:var(--navy); margin-bottom:12px;">Add New Fixed Meeting</h4>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Day</label>
+        <select id="fm-day">
+          <option value="Mon">Monday</option>
+          <option value="Tue">Tuesday</option>
+          <option value="Wed">Wednesday</option>
+          <option value="Thu">Thursday</option>
+          <option value="Fri">Friday</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Start Time</label>
+        <input type="time" id="fm-start" min="09:00" max="20:00">
+      </div>
+      <div class="form-group">
+        <label>End Time</label>
+        <input type="time" id="fm-end" min="09:00" max="20:00">
+      </div>
+      <div class="form-group">
+        <label>Owner</label>
+        <input type="text" id="fm-owner" placeholder="Owner name">
+      </div>
+      <div class="form-group">
+        <label>Meeting Title</label>
+        <input type="text" id="fm-note" placeholder="Meeting title">
+      </div>
+    </div>
+    <div class="form-actions">
+      <button class="btn-submit" onclick="addFixedMeeting()">Add Fixed Meeting</button>
+      <button class="btn-cancel" onclick="resetFixedForm()">Clear Form</button>
+    </div>
+  </div>
+</div>
+
+</main>
+
+<script>
+// ── Firebase Configuration ────────────────────────────────────────────
+// TODO: Replace these values with your Firebase project credentials
+// Get these from Firebase Console: https://console.firebase.google.com
+const firebaseConfig = {
+  // Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+import { getAnalytics } from "firebase/analytics";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
+
+// Your web app's Firebase configuration
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+  apiKey: "AIzaSyDKQ9d57R73yx3o1qdHzQPvzTVd_wREAAY",
+  authDomain: "meetingroombooking-6d91c.firebaseapp.com",
+  projectId: "meetingroombooking-6d91c",
+  storageBucket: "meetingroombooking-6d91c.firebasestorage.app",
+  messagingSenderId: "10016142582",
+  appId: "1:10016142582:web:66b8ba42687f1f03d368d7",
+  measurementId: "G-R4QD6EK6PW"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
+};
+
+// Initialize Firebase
+let db = null;
+let firebaseInitialized = false;
+
+try {
+  firebase.initializeApp(firebaseConfig);
+  db = firebase.database();
+  firebaseInitialized = true;
+  console.log('✅ Firebase initialized successfully');
+} catch(err) {
+  console.warn('⚠️ Firebase not configured. Using local storage only.');
+  console.log('To enable real-time sync, update firebaseConfig with your Firebase credentials.');
+}
+
+// ── Data ──────────────────────────────────────────────────────────────
+const defaultBookings = [
+  {id:1, date:'2026-03-17', day:'Tue', type:'Meeting',   owner:'John',  start:'16:00', end:'18:00', note:''},
+  {id:2, date:'2026-03-18', day:'Wed', type:'Meeting',   owner:'John',  start:'10:00', end:'12:00', note:''},
+  {id:3, date:'2026-03-18', day:'Wed', type:'Meeting',   owner:'Roy',   start:'13:30', end:'14:30', note:''},
+  {id:4, date:'2026-03-18', day:'Wed', type:'Meeting',   owner:'MK',    start:'15:00', end:'16:00', note:''},
+  {id:5, date:'2026-03-18', day:'Wed', type:'Meeting',   owner:'Bryan', start:'16:00', end:'18:00', note:''},
+  {id:6, date:'2026-03-19', day:'Thu', type:'Meeting',   owner:'Simon', start:'12:00', end:'13:00', note:''},
+  {id:7, date:'2026-03-19', day:'Thu', type:'Meeting',   owner:'John',  start:'10:00', end:'12:00', note:''},
+  {id:8, date:'2026-03-19', day:'Thu', type:'Meeting',   owner:'John',  start:'14:00', end:'16:00', note:'⚠️ Same person consecutive booking'},
+  {id:9, date:'2026-03-24', day:'Tue', type:'Interview', owner:'Jessie',start:'11:00', end:'12:00', note:''},
+  {id:10,date:'2026-03-24', day:'Tue', type:'Interview', owner:'Jessie',start:'15:00', end:'16:00', note:''},
+  {id:11,date:'2026-03-20', day:'Fri', type:'Meeting',   owner:'Simon', start:'11:00', end:'12:00', note:''},
+  {id:12,date:'2026-03-20', day:'Fri', type:'Meeting',   owner:'John',  start:'17:00', end:'17:30', note:''},
+  {id:13,date:'2026-03-23', day:'Mon', type:'Meeting',   owner:'Simon', start:'11:00', end:'12:00', note:''},
+  {id:14,date:'2026-03-24', day:'Tue', type:'Meeting',   owner:'MK',    start:'11:00', end:'12:00', note:''},
+];
+
+const defaultFixedMeetings = [
+  {day:'Mon', type:'fixed', owner:'Amy', start:'15:30', end:'16:30', note:'SD Team Weekly'},
+  {day:'Tue', type:'fixed', owner:'MK',  start:'14:00', end:'14:50', note:'Biz & Team Leader'},
+  {day:'Wed', type:'fixed', owner:'MK',  start:'14:00', end:'14:50', note:'Production Team'},
+];
+
+// Data arrays
+let bookings = [];
+let fixedMeetings = [];
+
+// Initialize data from Firebase or localStorage
+async function initializeData() {
+  if(firebaseInitialized) {
+    // Set up real-time listeners for Firebase
+    setupFirebaseListeners();
+  } else {
+    // Fallback to localStorage
+    bookings = JSON.parse(localStorage.getItem('bookings')) || defaultBookings;
+    fixedMeetings = JSON.parse(localStorage.getItem('fixedMeetings')) || defaultFixedMeetings;
+    buildTimetable();
+    buildList();
+    updateSummaryCards();
+    scheduleWeeklyUpdate();
+  }
+}
+
+// ── Firebase Data Functions ───────────────────────────────────────────
+function setupFirebaseListeners() {
+  // Listen for bookings changes
+  db.ref('bookings').on('value', (snapshot) => {
+    const data = snapshot.val();
+    bookings = data ? Object.values(data) : [];
+    console.log('📥 Bookings updated from Firebase:', bookings.length, 'items');
+    buildTimetable();
+    buildList();
+    updateSummaryCards();
+  }, (error) => {
+    console.error('❌ Error reading bookings:', error);
+    // Fallback to localStorage
+    bookings = JSON.parse(localStorage.getItem('bookings')) || defaultBookings;
+    buildTimetable();
+    buildList();
+    updateSummaryCards();
+  });
+
+  // Listen for fixed meetings changes
+  db.ref('fixedMeetings').on('value', (snapshot) => {
+    const data = snapshot.val();
+    fixedMeetings = data ? Object.values(data) : [];
+    console.log('📥 Fixed meetings updated from Firebase:', fixedMeetings.length, 'items');
+    buildTimetable();
+    buildList();
+    updateSummaryCards();
+  }, (error) => {
+    console.error('❌ Error reading fixed meetings:', error);
+    // Fallback to localStorage
+    fixedMeetings = JSON.parse(localStorage.getItem('fixedMeetings')) || defaultFixedMeetings;
+    buildTimetable();
+    buildList();
+    updateSummaryCards();
+  });
+
+  // Schedule updates
+  setTimeout(() => {
+    scheduleWeeklyUpdate();
+  }, 500);
+}
+
+// Save bookings to Firebase or localStorage
+function saveBookings() {
+  if(firebaseInitialized && db) {
+    // Create object with IDs as keys for Firebase
+    const bookingsObj = {};
+    bookings.forEach((b, idx) => {
+      bookingsObj[b.id || idx] = b;
+    });
+    
+    db.ref('bookings').set(bookingsObj).catch((error) => {
+      console.error('❌ Error saving bookings to Firebase:', error);
+      // Fallback to localStorage
+      localStorage.setItem('bookings', JSON.stringify(bookings));
+    });
+  } else {
+    // Fallback to localStorage
+    localStorage.setItem('bookings', JSON.stringify(bookings));
+  }
+}
+
+// Save fixed meetings to Firebase or localStorage
+function saveFixedMeetings() {
+  if(firebaseInitialized && db) {
+    // Create object with indices as keys for Firebase
+    const fixedObj = {};
+    fixedMeetings.forEach((f, idx) => {
+      fixedObj[idx] = f;
+    });
+    
+    db.ref('fixedMeetings').set(fixedObj).catch((error) => {
+      console.error('❌ Error saving fixed meetings to Firebase:', error);
+      // Fallback to localStorage
+      localStorage.setItem('fixedMeetings', JSON.stringify(fixedMeetings));
+    });
+  } else {
+    // Fallback to localStorage
+    localStorage.setItem('fixedMeetings', JSON.stringify(fixedMeetings));
+  }
+}
+
+const dayMap = {Mon:1, Tue:2, Wed:3, Thu:4, Fri:5};
+const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+let currentWeekStart = new Date();
+const today = new Date();
+const dayOfWeek = today.getDay();
+
+// Get Monday of current week (or next week if Saturday/Sunday)
+if(dayOfWeek === 0 || dayOfWeek === 6) { // Sunday or Saturday
+  currentWeekStart.setDate(today.getDate() + (dayOfWeek === 0 ? 1 : 2));
+} else {
+  currentWeekStart.setDate(today.getDate() - (dayOfWeek - 1));
+}
+
+function getWeekDates() {
+  const week = [];
+  for(let i=0; i<5; i++) {
+    const d = new Date(currentWeekStart);
+    d.setDate(d.getDate() + i);
+    week.push(d);
+  }
+  return week;
+}
+
+function formatDate(d) {
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${m}/${day}`;
+}
+
+function getDateKey(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function toMin(t) { const [h,m]=t.split(':').map(Number); return h*60+m; }
+function fromMin(m) { return `${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`; }
+
+function hasConflict(b1, b2) {
+  if(b1.date !== b2.date) return false;
+  return toMin(b1.start) < toMin(b2.end) && toMin(b2.start) < toMin(b1.end);
+}
+
+// ── Timetable ────────────────────────────────────────────────────────
+function buildTimetable() {
+  const body = document.getElementById('tt-body');
+  body.innerHTML = '';
+  const weekDates = getWeekDates();
+  
+  // Update header
+  const headerStart = formatDate(weekDates[0]);
+  const headerEnd = formatDate(weekDates[4]);
+  document.querySelector('.week-bar h2').textContent = `🗓 Weekly Timetable (${headerStart} ~ ${headerEnd})`;
+  
+  // Update table headers with actual dates
+  const ttHead = document.querySelector('.tt-head');
+  ttHead.innerHTML = '<div class="tt-head-cell" style="background:#64748B">Time</div>';
+  weekDates.forEach((d, idx) => {
+    const dayLabel = dayNames[d.getDay()];
+    const dateStr = formatDate(d);
+    const isToday = getDateKey(d) === getDateKey(today);
+    const cell = document.createElement('div');
+    cell.className = `tt-head-cell ${isToday ? 'today' : ''}`;
+    cell.textContent = `${dayLabel} ${dateStr}`;
+    ttHead.appendChild(cell);
+  });
+  
+  const slots = [];
+  for(let m=9*60; m<20*60; m+=30) slots.push(fromMin(m));
+
+  slots.forEach(t => {
+    const lbl = document.createElement('div');
+    lbl.className = 'time-label' + (t.endsWith(':00') ? ' hour' : '');
+    lbl.textContent = t.endsWith(':00') ? t : '';
+    body.appendChild(lbl);
+
+    weekDates.forEach((d, dayIdx) => {
+      const cell = document.createElement('div');
+      const tMin = toMin(t);
+      const dateKey = getDateKey(d);
+
+      const hits = bookings.filter(b => {
+        return b.date === dateKey && toMin(b.start) <= tMin && tMin < toMin(b.end);
+      });
+      
+      const dayName = dayNames[d.getDay()];
+      const fixHits = fixedMeetings.filter(f => {
+        return f.day === dayName && toMin(f.start) <= tMin && tMin < toMin(f.end);
+      });
+      
+      const allHits = [...fixHits, ...hits];
+
+      if(allHits.length === 0) {
+        cell.className = 'slot';
+      } else if(allHits.length === 1) {
+        const h = allHits[0];
+        if(h.type === 'fixed') {
+          cell.className = 'slot booked-fixed';
+          cell.innerHTML = `<div class="slot-content fixed">★ ${h.owner}</div>`;
+        } else if(h.type === 'Interview') {
+          cell.className = 'slot booked-interview';
+          cell.innerHTML = `<div class="slot-content interview">🎤 ${h.owner}</div>`;
+        } else {
+          cell.className = 'slot booked-meeting';
+          cell.innerHTML = `<div class="slot-content meeting">📌 ${h.owner}</div>`;
+        }
+      } else {
+        cell.className = 'slot conflict';
+        const names = allHits.map(h=>h.owner).join(' / ');
+        cell.innerHTML = `<div class="slot-content conflict">⚠️ ${names}</div>`;
+      }
+      body.appendChild(cell);
+    });
+  });
+}
+
+// ── List View ─────────────────────────────────────────────────────────
+function buildList() {
+  const container = document.getElementById('list-container');
+  container.innerHTML = '';
+  
+  // Get current week dates (Mon-Fri)
+  const weekDates = getWeekDates();
+  const weekDateKeys = weekDates.map(d => getDateKey(d));
+  
+  // Update week range in header
+  const headerStart = formatDate(weekDates[0]);
+  const headerEnd = formatDate(weekDates[4]);
+  const weekBarH2 = document.querySelector('.list-view .week-bar h2');
+  if(weekBarH2) weekBarH2.textContent = `📋 Weekly Bookings (${headerStart} ~ ${headerEnd})`;
+  
+  // Filter bookings for current week only
+  const weekBookings = bookings.filter(b => weekDateKeys.includes(b.date));
+  
+  // If no bookings this week, show empty state
+  if(weekBookings.length === 0) {
+    container.innerHTML = `
+      <div style="text-align:center; padding:40px 20px; color:var(--dgray);">
+        <div style="font-size:3rem; margin-bottom:10px;">📭</div>
+        <p style="font-size:.95rem; font-weight:500;">No bookings this week</p>
+        <p style="font-size:.85rem; margin-top:5px;">Navigate to other weeks or <a href="#" onclick="switchTab('add'); return false;" style="color:var(--blue); text-decoration:underline;">add a new booking</a></p>
+      </div>
+    `;
+    return;
+  }
+  
+  // Group bookings by date
+  const byDate = {};
+  weekBookings.forEach(b => {
+    if(!byDate[b.date]) byDate[b.date] = [];
+    byDate[b.date].push(b);
+  });
+
+  // Display only for current week dates
+  weekDateKeys.forEach(dateKey => {
+    if(!byDate[dateKey]) return; // Skip days with no bookings
+    
+    const items = byDate[dateKey].sort((a,b) => toMin(a.start)-toMin(b.start));
+    const d = new Date(dateKey);
+    const dayName = dayNames[d.getDay()];
+
+    const group = document.createElement('div');
+    group.className = 'day-group';
+
+    // check conflicts for this day
+    let hasConf = false;
+    for(let i=0;i<items.length;i++) for(let j=i+1;j<items.length;j++) {
+      if(hasConflict(items[i],items[j])) hasConf = true;
+    }
+
+    group.innerHTML = `
+      <div class="day-header">
+        ${dateKey.replace(/-/g,'/')} (${dayName})
+        ${hasConf ? '<span class="conflict-badge">⚠️ Time conflict detected</span>' : ''}
+      </div>
+      <div class="booking-list">
+        ${items.map(b => {
+          const isConf = items.some(other => other.id !== b.id && hasConflict(b, other));
+          return `<div class="booking-row ${isConf?'conflict-row':''}">
+            <div class="time-range">${b.start} – ${b.end}</div>
+            <div class="booking-title">${b.note || 'Room booking'} ${isConf ? '<span class="conflict-badge">⚠️Conflict</span>' : ''}</div>
+            <div class="owner-badge">${b.owner}</div>
+            <div class="purpose-badge ${b.type.toLowerCase()}">${b.type}</div>
+            <button class="btn-delete-small" onclick="deleteBooking(${b.id})" title="Cancel booking">✕</button>
+          </div>`;
+        }).join('')}
+      </div>`;
+    container.appendChild(group);
+  });
+}
+
+function prevWeekList() {
+  currentWeekStart.setDate(currentWeekStart.getDate() - 7);
+  buildList();
+}
+
+function nextWeekList() {
+  currentWeekStart.setDate(currentWeekStart.getDate() + 7);
+  buildList();
+}
+
+function deleteBooking(id) {
+  const booking = bookings.find(b => b.id === id);
+  if(!booking) return;
+  
+  if(confirm(`Cancel booking: ${booking.start}–${booking.end} (${booking.owner})\n\nAre you sure?`)) {
+    const idx = bookings.findIndex(b => b.id === id);
+    if(idx >= 0) {
+      bookings.splice(idx, 1);
+      saveBookings();
+      buildTimetable();
+      buildList();
+      updateSummaryCards();
+      alert('✅ Booking cancelled successfully!');
+    }
+  }
+}
+
+// ── Add booking ───────────────────────────────────────────────────────
+function checkConflict() {
+  const date = document.getElementById('f-date').value;
+  const start = document.getElementById('f-start').value;
+  const end   = document.getElementById('f-end').value;
+  const alert = document.getElementById('conflict-alert');
+  const msg   = document.getElementById('conflict-msg');
+  if(!date||!start||!end) { alert.className='conflict-alert show'; msg.textContent='Please enter date, start time, and end time.'; return; }
+  const d = new Date(date); const dayNames=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const dayStr = dayNames[d.getDay()];
+  const newB = {date, day:dayStr, start, end};
+  const confs = bookings.filter(b => hasConflict(b, newB));
+  const fixConfs = fixedMeetings.filter(f => f.day===dayStr && hasConflict(f, newB));
+  if(confs.length===0 && fixConfs.length===0) {
+    alert.className='conflict-alert'; alert.style.background='#F0FDF4'; alert.style.borderColor='#86EFAC';
+    alert.style.display='flex'; msg.style.color='#166534'; msg.textContent='✅ No conflicts! Booking is available.';
+  } else {
+    const all = [...fixConfs.map(f=>f.owner+' (recurring)'), ...confs.map(b=>b.owner)];
+    alert.className='conflict-alert show'; msg.textContent=`⚠️ Conflict: Overlaps with ${all.join(', ')}.`;
+  }
+}
+
+function addBooking() {
+  const date  = document.getElementById('f-date').value;
+  const type  = document.getElementById('f-type').value;
+  const owner = document.getElementById('f-owner').value;
+  const start = document.getElementById('f-start').value;
+  const end   = document.getElementById('f-end').value;
+  const note  = document.getElementById('f-note').value;
+  if(!date||!owner||!start||!end) { alert('Please fill in all required fields.'); return; }
+  checkConflict();
+  const d = new Date(date); const dayNames=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const maxId = bookings.length > 0 ? Math.max(...bookings.map(b => b.id)) : 0;
+  bookings.push({id:maxId+1, date, day:dayNames[d.getDay()], type, owner, start, end, note});
+  saveBookings();
+  alert(`✅ Booking added successfully!\n${date} ${start}–${end} (${owner})`);
+  document.getElementById('f-date').value = '';
+  document.getElementById('f-owner').value = '';
+  document.getElementById('f-start').value = '';
+  document.getElementById('f-end').value = '';
+  document.getElementById('f-note').value = '';
+  buildTimetable(); buildList(); updateSummaryCards();
+}
+
+function prevWeek() {
+  currentWeekStart.setDate(currentWeekStart.getDate() - 7);
+  buildTimetable();
+}
+
+function nextWeek() {
+  currentWeekStart.setDate(currentWeekStart.getDate() + 7);
+  buildTimetable();
+}
+
+// Check if today is Saturday/Sunday and auto-advance to next week
+function checkAndAdvanceWeek() {
+  const nowDayOfWeek = new Date().getDay();
+  if(nowDayOfWeek === 0 || nowDayOfWeek === 6) { // Sunday or Saturday
+    currentWeekStart.setDate(new Date().getDate() + (nowDayOfWeek === 0 ? 1 : 2));
+  }
+}
+
+// Auto-update views every Monday at 00:00
+function scheduleWeeklyUpdate() {
+  const now = new Date();
+  let nextMonday = new Date(now);
+  const dayOfWeek = now.getDay();
+  
+  // Calculate next Monday 00:00
+  if(dayOfWeek === 0) { // Sunday
+    nextMonday.setDate(now.getDate() + 1);
+  } else if(dayOfWeek === 1) { // Monday
+    nextMonday.setDate(now.getDate() + 7); // Next week Monday
+  } else { // Tuesday to Saturday
+    nextMonday.setDate(now.getDate() + (8 - dayOfWeek));
+  }
+  
+  nextMonday.setHours(0, 0, 0, 0);
+  const timeUntilMonday = nextMonday.getTime() - now.getTime();
+  
+  // Schedule update
+  setTimeout(() => {
+    updateWeekView();
+    // Recursively schedule next Monday
+    scheduleWeeklyUpdate();
+  }, timeUntilMonday);
+}
+
+// Update current week display and summary cards
+function updateWeekView() {
+  const now = new Date();
+  const dayOfWeek = now.getDay();
+  
+  currentWeekStart = new Date(now);
+  currentWeekStart.setHours(0, 0, 0, 0);
+  
+  if(dayOfWeek === 0) { // Sunday
+    currentWeekStart.setDate(now.getDate() + 1);
+  } else if(dayOfWeek !== 1) { // Not Monday
+    currentWeekStart.setDate(now.getDate() - (dayOfWeek - 1));
+  }
+  
+  buildTimetable();
+  buildList();
+  updateSummaryCards();
+}
+
+// ── Fixed Meetings Management ─────────────────────────────────────────
+let editingFixedIndex = -1;
+
+function buildFixedList() {
+  const container = document.getElementById('fixed-list-display');
+  container.innerHTML = '';
+  
+  if(fixedMeetings.length === 0) {
+    container.innerHTML = '<p style="color:var(--dgray); font-size:.85rem;">No fixed meetings yet</p>';
+    return;
+  }
+  
+  fixedMeetings.forEach((fm, idx) => {
+    const item = document.createElement('div');
+    item.className = 'fixed-item';
+    item.innerHTML = `
+      <div class="fixed-item-info">
+        <div class="fixed-item-day">📅 ${fm.day}</div>
+        <div class="fixed-item-time">${fm.start} – ${fm.end}</div>
+        <div class="fixed-item-title">👤 ${fm.owner} | ${fm.note}</div>
+      </div>
+      <div class="fixed-item-actions">
+        <button class="btn-edit" onclick="editFixedMeeting(${idx})">Edit</button>
+        <button class="btn-delete" onclick="deleteFixedMeeting(${idx})">Delete</button>
+      </div>
+    `;
+    container.appendChild(item);
+  });
+}
+
+function editFixedMeeting(idx) {
+  const fm = fixedMeetings[idx];
+  document.getElementById('fm-day').value = fm.day;
+  document.getElementById('fm-start').value = fm.start;
+  document.getElementById('fm-end').value = fm.end;
+  document.getElementById('fm-owner').value = fm.owner;
+  document.getElementById('fm-note').value = fm.note;
+  editingFixedIndex = idx;
+  document.querySelector('.form-actions .btn-submit').textContent = 'Update Fixed Meeting';
+}
+
+function deleteFixedMeeting(idx) {
+  if(confirm(`Delete "${fixedMeetings[idx].note}" fixed meeting on ${fixedMeetings[idx].day}?`)) {
+    fixedMeetings.splice(idx, 1);
+    saveFixedMeetings();
+    buildFixedList();
+    updateAllViews();
+  }
+}
+
+function addFixedMeeting() {
+  const day = document.getElementById('fm-day').value;
+  const start = document.getElementById('fm-start').value;
+  const end = document.getElementById('fm-end').value;
+  const owner = document.getElementById('fm-owner').value;
+  const note = document.getElementById('fm-note').value;
+  
+  if(!day||!start||!end||!owner||!note) { 
+    alert('Please fill in all fields.');
+    return; 
+  }
+  
+  if(editingFixedIndex >= 0) {
+    fixedMeetings[editingFixedIndex] = {day, type:'fixed', owner, start, end, note};
+    editingFixedIndex = -1;
+    document.querySelector('.form-actions .btn-submit').textContent = 'Add Fixed Meeting';
+  } else {
+    fixedMeetings.push({day, type:'fixed', owner, start, end, note});
+  }
+  
+  saveFixedMeetings();
+  resetFixedForm();
+  buildFixedList();
+  updateAllViews();
+}
+
+function resetFixedForm() {
+  document.getElementById('fm-day').value = 'Mon';
+  document.getElementById('fm-start').value = '';
+  document.getElementById('fm-end').value = '';
+  document.getElementById('fm-owner').value = '';
+  document.getElementById('fm-note').value = '';
+  editingFixedIndex = -1;
+  document.querySelector('.form-actions .btn-submit').textContent = 'Add Fixed Meeting';
+}
+
+function updateAllViews() {
+  buildTimetable();
+  buildList();
+  updateSummaryCards();
+}
+
+// Update summary cards based on current week
+function updateSummaryCards() {
+  const weekDates = getWeekDates();
+  const weekDateKeys = weekDates.map(d => getDateKey(d));
+  
+  // Weekly Bookings: count bookings in current week
+  const weeklyBookings = bookings.filter(b => weekDateKeys.includes(b.date));
+  document.getElementById('total-count').textContent = weeklyBookings.length;
+  
+  // Today's Bookings: count bookings for today
+  const todayKey = getDateKey(today);
+  const todayBookings = bookings.filter(b => b.date === todayKey);
+  document.getElementById('today-count').textContent = todayBookings.length;
+  
+  // Weekly Booking Conflicts: count conflicting bookings in current week
+  let conflictCount = 0;
+  for(let i = 0; i < weeklyBookings.length; i++) {
+    for(let j = i + 1; j < weeklyBookings.length; j++) {
+      if(hasConflict(weeklyBookings[i], weeklyBookings[j])) {
+        conflictCount++;
+      }
+    }
+  }
+  document.getElementById('conflict-count').textContent = conflictCount;
+  
+  // Weekly Interview: count interview bookings in current week
+  const weeklyInterviews = weeklyBookings.filter(b => b.type === 'Interview');
+  document.getElementById('interview-count').textContent = weeklyInterviews.length;
+}
+
+// ── Tabs ──────────────────────────────────────────────────────────────
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach((t,i) => {
+    t.classList.toggle('active', ['timetable','list','add','fixed'][i]===tab);
+  });
+  document.getElementById('view-timetable').className = 'timetable-view'+(tab==='timetable'?'':' hidden');
+  document.getElementById('view-list').className      = 'list-view'+(tab==='list'?' active':'');
+  document.getElementById('view-add').className       = 'add-form-wrap'+(tab==='add'?' active':'');
+  document.getElementById('view-fixed').className     = 'add-form-wrap'+(tab==='fixed'?' active':'');
+  if(tab==='list') buildList();
+  if(tab==='fixed') buildFixedList();
+}
+
+// Init
+checkAndAdvanceWeek();
+initializeData();
+document.getElementById('f-date').valueAsDate = new Date();
+
+// Show/hide Firebase banner
+if(firebaseInitialized) {
+  document.getElementById('firebase-banner').classList.add('hidden');
+} else {
+  document.getElementById('firebase-banner').classList.remove('hidden');
+}
+</script>
+</body>
+</html>
